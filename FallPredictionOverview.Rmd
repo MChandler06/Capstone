@@ -1,0 +1,129 @@
+---
+title: "FallPredictionOverview"
+author: "Megan Chandler"
+date: "9/6/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+options(tinytex.verbose = TRUE)
+
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+
+falldetectdf_trimmed <- readRDS("Data/falldetectedTrimmedDataset.rds")
+train2 <- readRDS("Data/trimmedTrainData.rds")
+
+CMTable <- readRDS("Results/FinalModelConfusionMatrix.rds")
+
+
+```
+
+## Introduction
+
+Within the US and globally, there is a large proportion of the population that is reaching retirement age and beyond with the Baby Boomers generation. As these individuals age and strive to remain independent in their day-to-day lives, the use of burgeoning analytics techniques and technology will support their independent living preferences, while still providing some safety measures.  For example, one major concern with elderly adults is the risk of a fall that leaves the individual stranded on the floor, unconscious, or in some cases significantly injured. With the aid of new analytics techniques and technologies, organizations are seeking to develop and provide tools that can alert a family member, care professional, or emergency service when a fall occurs and relay information regarding the health status of the fallen individual. 
+
+This current project seeks to develop an algorithm that detects a fall using data gathered via various health indicators and monitors, including sugar level, EEG, blood pressure, heart rate, circulation, and time monitoring. The data were gathered as part of a research study conducted by Özdemir and Barshan (2017) to detect falls. The current study trained and evaluated various models, including linear, non-linear, knn, and Random Forest models, using a cross-validation approach to detect a Fall versus a Non-fall.  The final, best fitting, model was a Random Forest model that resulted in a final Accuracy of 87.1 % (kappa = 0.61), Sensitivity of 93.2%, and Specificity of 65.1%. 
+
+
+## Methods
+
+The data used were created as part a study conducted by Özdemir and Barshan (2017).  The data contains information regarding a variety of normal daily movements (i.e., standing, walking, sitting, running, cramps), as well as, falls, various health indicators (i.e., Sugar Level, EEG, blood pressure, heart rate, circulation), and time monitoring. The data consisted of 16,382 observations of activities, with the most frequent activity being standing (n = 4,608) and falling being the second most frequent activity (n = 3,588). For this project, as the key question was regarding detecting a fall versus a non-fall, the Activity variable was recoded into a binary variable (0 = Non-fall, 1 = Fall). After recoding the variable, the dataset consisted of 12,794 Non-Falls (78%) and 3,588 Falls (22%). Before training the algorithms, the data were divided into a train dataset, consisting of 80% of original Fall dataset and a validation dataset (20%).  Using the train dataset, further exploration was conducted into how the variables were interrelated and various algorithms were evaluated (~see table below for Train dataset Fall/Non-Fall distribution~). 
+
+```{r Activity Descriptives, echo=FALSE, message=FALSE, error=FALSE}
+
+library(tidyverse)
+Activity_distro <- prop.table(table(train2$FALL_CODED)) *100
+distro <- cbind(freq = table(train2$FALL_CODED), Activity_distro = Activity_distro)
+distro %>% knitr::kable()
+```
+
+To better understand the distributions of the variables, univariate boxplots were created demonstrating many of the variables are not normally distributed and have positive skew. Additionally, a multivariate Ellipse scatterplot suggested that there were correlations between the variables and the outcome indicator, Fall/Non-Fall (see plot below). This initial evidence supported the decision to use these variables in the machine learning model. 
+
+```{r Plots, echo=FALSE, message=FALSE, error=FALSE}
+library(tidyverse)
+library(caret)
+library(lattice)
+
+x <- train2[,1:6]
+y <- train2[,7]
+ellipse <- featurePlot(x = x, y = y, plot = "ellipse")
+return(ellipse)
+```
+
+In order to train the various algorithms, a 10-fold Cross-Validation approach was used where each fold created a new training and validation (80% and 20% of the train dataset, respectively). To determine the best fitting model for the data, a linear model, non-linear, KNN, and Random Forest approach were tested.  As this was a binary classification model, Accuracy was used as the primary indicator of model performance while testing and training the models.  The Accuracy and Kappa for each model were then compared to each other and a best approach was selected, further tuned, and then tested on the full, original dataset to determine the final Accuracy and other performance metrics. 
+
+## Results
+A 10-fold Cross-Validation approach was used to evaluate a linear model, non-linear, KNN, and Random Forest approach and the Accuracy and Kappa were used to initially evaluate the best fitting approach.  From these results, a Random Forest approach was selected as the best fitting model (Accuracy~Mean~ = 86.7%, Kappa~Mean~ = 59.5%, ~see Table below~). While there is not a consistent rule regarding Kappa and there are several factors the influence its evaluation, the Kappa for this initial Random Forest Model falls within the Moderate (Landis and Koch, 1977) or Fair-to-Good range (Fleiss, 1981) .
+
+
+```{r Accuracy Table, echo=FALSE, message=FALSE, error=FALSE}
+
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+accTable<- readRDS("Results/AccuracyTable.rds")
+accTable %>% knitr::kable()
+```
+
+The Random Forest model was further tuned by identifying the optimum MTRY value as 2, as well as, evaluating any improvement when taking factor importance into account. The resulting Accuracy when accounting for the importance of factors did not show improvement so it was not included in the final model. See the table below for the results of the tuned Random Forest model. 
+
+```{r RandomForest Tuning, echo=FALSE, message=FALSE, error=FALSE}
+
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+
+
+##setting up 10 fold CV
+control <- trainControl(method = "cv", number = 10, p = .8)
+metric <- "Accuracy"  ## ratio of correctly predicted
+
+set.seed(1)
+fit.rf2 <- train(FALL_CODED~ . , data=train2, method = "rf", metric = metric, trControl = control)
+### picking best mtry ###
+ggplot(fit.rf2)
+
+RF_CMTable <- readRDS("Results/RFModelConfusionMatrix.rds")
+RF_CMTable %>% knitr::kable()
+
+
+
+
+```
+
+
+After tuning the Random Forest model, the final model was run on the original full dataset.  The final model resulted in an Accuracy of 87.1% (Kappa = 60.7%), Sensitivity of 93.3%, Specificity of 65.1% (~see Table below~).
+
+
+```{r Final Model, echo=FALSE, message=FALSE, error=FALSE}
+
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+
+
+CMTable %>% knitr::kable()
+
+
+
+```
+
+## Conclusion
+
+Overall the accuracy is high, 87.1%, but the Confusion Matrix does show a relatively low Specificity.  One potential reason this is happening is because the prevalence of an actual fall in the dataset is relatively low.  Future iterations can work to account for this imbalance in the prevalence between observed falls and non-falls through evaluating the F1 score, or balanced accuracy. Additionally, based on the data description provided on Kaggle, the dataset is based on participants voluntarily falling.  Future research on health indicators related to unintentional falls could further develop the algorithm with data gathered monitoring individuals outside of a constructed environment.  With this approach, the data should also be collected from a sample that more closely represents the population of interest to more accurately train the algorithm.  
+
+Despite these limitations, the current algorithm is correctly identifying 65% of actual falls, and could potentially accurately alert a care professional of the incident.  
+
+
+## References 
+Fleiss, J. L. (1981). The measurement of interrater agreement. Statistical methods for rates and proportions. 2. Auflage. John Wiley & Sons, New York, S. 212–236, Kapitel 13.
+
+Landis, J. R.  &  Koch, G. G. (1977). The measurement of observer agreement for categorical data. Biometrics. 33, Spring, 159–174.
+
+Özdemir, A. T. & Barshan, Br. (2014). Detecting Falls with Wearable Sensors Using Machine Learning Techniques. Sensors (Basel, Switzerland) 14.6: 10691–10708. PMC. Web. 23 Apr. 2017.
+
